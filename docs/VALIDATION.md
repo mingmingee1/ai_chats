@@ -63,6 +63,15 @@
 |---|---|
 | ![모바일 라이트](validation/mobile-light.png) | ![모바일 다크](validation/mobile-dark.png) |
 
+## Windows 외부 HTTPS 수정 (2026-10-15)
+
+사용자 PC에서 `spawnSync openssl ENOENT`로 외부 리스너가 시작되지 않는 것을 확인했습니다. 최신 Windows의 기본 PowerShell/.NET `CertificateRequest`로 RSA 2048 / SHA-256 자체서명 인증서를 생성하도록 수정했습니다. 생성은 메모리와 `data/tls/` 안에서만 이루어지며 관리자 권한, 인증서 저장소 등록, 실행 정책 변경, 별도 패키지 설치를 요구하지 않습니다. 기존 PEM 인증서가 있으면 그대로 사용하고, 새 인증서는 PKCS#12로 저장해 Node HTTPS 서버에 제공합니다.
+
+- Linux에서 실제 PKCS#12 인증서로 HTTPS 핸드셰이크, 인증 전 로그인 이동, 비밀번호 로그인과 Secure 쿠키를 검증했습니다. 테스트 서버의 인증서를 명시적으로 신뢰하고 이름도 검증했으며 TLS 검증을 끄지 않았습니다.
+- 인증서 재사용, 기존 비밀번호 보존, 생성 실패·잘못된 출력의 임시 파일 정리를 검증했습니다.
+- PowerShell 호출 구성과 PKCS#12 로딩 경로를 테스트했지만 **Windows의 PowerShell/.NET 실행 자체는 이 Linux 환경에서 검증하지 못했습니다**. 실제 Windows 전용 통합 테스트를 추가했고 여기서는 건너뜁니다.
+- 수정 후 전체 테스트: 29개 통과, 0개 실패, Windows 전용 2개 건너뜀.
+
 ## 아직 확인하지 못한 것
 
 1. **실제 Muse Code CLI**: 클라우드에 실행 파일이 없고 공식 설치 URL은 HTTP 403을 반환했습니다. 따라서 실제 버전의 플래그, OAuth 로그인, JSONL 이벤트 형태, 모델 권한은 검증하지 못했습니다. 사용자 PC에서 `muse exec --help`, `muse login`, 설치 도우미의 테스트 대화로 확인해야 합니다. 필요하면 `agents.muse.safetyArgs`와 `extraArgs`로 버전 차이를 조정합니다.

@@ -188,6 +188,8 @@ CLI에 로그인한 **PC에서 서버를 실행**하고, 폰은 같은 와이파
 4. 자체서명 인증서라 첫 접속 시 인증서 경고를 한 번 확인하고 진행합니다. `data/external-password.txt`에 생성된 비밀번호로 로그인합니다. 비밀번호 변경은 `node set-password.mjs`입니다.
 5. **홈 화면에 추가:** iOS Safari의 공유 → 홈 화면에 추가, Android Chrome 메뉴 → 홈 화면에 추가. manifest와 아이콘은 비밀번호 로그인 후 제공됩니다. 자체서명 인증서나 브라우저 정책에 따라 설치 메뉴 대신 바로가기만 제공될 수 있습니다. 서비스 워커와 오프라인 채팅은 제공하지 않습니다.
 
+Windows에서 최초 HTTPS 인증서는 기본 PowerShell과 .NET 기능으로 생성합니다(OpenSSL 별도 설치 불필요, 최신 Windows 10/11 기준). 기존 `data/tls/key.pem`·`cert.pem`이 있으면 그대로 사용하고, 새 Windows 인증서는 `data/tls/windows-cert.pfx`·`windows-cert.pem`에 저장합니다. 관리자 권한이나 Windows 인증서 저장소 변경 없이 생성합니다. Linux/macOS의 최초 생성에는 OpenSSL을 사용합니다.
+
 같은 와이파이에서는 공유기 포트포워딩이 필요 없습니다. 휴대폰과 PC 사이를 차단하는 게스트 와이파이는 피하세요. 집 밖에서는 **[Tailscale](https://tailscale.com/)**을 PC와 폰에 설치하고 같은 계정/테일넷에 연결한 다음, PC의 Tailscale IP와 `:18321`로 접속할 수 있습니다. 방 비밀번호와 인증서 확인은 동일합니다. 공유기 포트포워딩은 자동으로 설정하지 않습니다.
 
 기존 외부 접속 리스너(`0.0.0.0:18321`, HTTPS + 비밀번호)를 그대로 사용합니다. 로그인 실패 제한과 외부 포트의 개발자 브릿지 차단도 유지됩니다.
@@ -226,6 +228,7 @@ PowerShell이 `muse`나 `codex` 명령을 찾지 못할 때는 프로젝트 폴�
 | 멤버가 "연결 문제" | 설치 도우미의 테스트 대화로 로그인·모델 이름 확인. 호출 기록은 `data/logs/<id>.log` |
 | Muse가 연결 문제 | `muse exec --help`로 실제 플래그를 확인하고 `agents.muse.safetyArgs`/`extraArgs`로 조정. `muse login`과 테스트 대화도 확인. 호출 기록은 `data/logs/muse.log` |
 | 서버가 포트를 못 연다 | 방이 이미 켜져 있는지 확인. 아니면 설치 도우미로 빈 포트를 고르거나 `port`를 다른 번호로 (Windows 예약 범위: `netsh int ipv4 show excludedportrange protocol=tcp`) |
+| Windows에서 `외부 접속을 못 켰어: spawnSync openssl ENOENT` | 예전 버전은 인증서 생성에 OpenSSL이 필요했습니다. 최신 `lib/external.mjs`로 교체하고 서버를 재시작하면 Windows 기본 기능으로 생성합니다. `data/`와 `config.json`은 그대로 유지하세요. |
 | 설치했는데 도우미가 CLI를 못 찾는다 | 설치 프로그램이 바꾼 PATH가 아직 안 먹은 것. 창을 닫고 도우미를 다시 실행 |
 | Gemini가 가끔 503 | Google 쪽 일시 장애. 알아서 20초 뒤부터 다시 시도한다 |
 | 사용량 탭이 비어 있음 | 해당 CLI가 사용량 조회를 지원하지 않거나 로그인 안 됨. 채팅엔 영향 없음 |
