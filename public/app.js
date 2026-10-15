@@ -2,6 +2,8 @@
 // and the shared-workspace panel. UI text comes from i18n.js (room language in <html lang>).
 
 import { t, applyI18n, locale } from '/i18n.js';
+import { renderChatText } from '/rich-text.mjs';
+import '/appearance.mjs?v=3';
 
 applyI18n();
 
@@ -42,6 +44,9 @@ const app = $('#app');
 const tl = $('#timeline');
 const msgsBox = $('#msgs');
 const input = $('#input');
+const ownerPicture = new Image();
+ownerPicture.onload = () => { S.ownerAvatar = '/avatars/user-profile.png'; if (S.room.userName) renderRoom(); };
+ownerPicture.src = '/avatars/user-profile.png';
 
 // ---------------------------------------------------------------------------
 // Touch devices have no hover: tapping text reveals just this bubble's tools.
@@ -62,13 +67,13 @@ document.addEventListener('click', (event) => {
 tl.addEventListener('scroll', closeTouchTools, { passive: true });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeTouchTools(); });
 
-// Follow the visible viewport when the phone keyboard opens. Keep readers in place.
+// Keep the layout viewport height when the keyboard covers the visual viewport.
+// The browser pans to the focused input instead of squeezing the entire chat.
 function resizeViewport() {
   const stuck = S.stuck;
-  document.documentElement.style.setProperty('--visual-height', `${window.visualViewport?.height || window.innerHeight}px`);
+  document.documentElement.style.setProperty('--layout-height', `${window.innerHeight}px`);
   if (stuck) requestAnimationFrame(() => { tl.scrollTop = tl.scrollHeight; });
 }
-window.visualViewport?.addEventListener('resize', resizeViewport);
 window.addEventListener('resize', resizeViewport);
 resizeViewport();
 
@@ -174,10 +179,32 @@ function inline(s) {
 }
 
 function renderText(text) {
-  return String(text).split('```').map((part, i) => (i % 2
-    ? `<pre>${esc(part.replace(/^[\w+-]*\n/, ''))}</pre>`
-    : inline(part.replace(/^\n+|\n+$/g, '')))).join('');
+  return renderChatText(text, { mentionHit, copyLabel: document.documentElement.lang === 'ko' ? '코드 복사' : 'Copy code' });
 }
+
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-copy-code]');
+  if (!button) return;
+  const code = button.closest('.code-block')?.querySelector('code');
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.textContent);
+    const label = button.textContent;
+    button.textContent = document.documentElement.lang === 'ko' ? '복사됨' : 'Copied';
+    setTimeout(() => { button.textContent = label; }, 1500);
+  } catch {
+    const range = document.createRange(); range.selectNodeContents(code);
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  }
+});
+
+// The room still works if the optional CDN is unavailable. Re-render old bubbles
+// once math loads, while preserving the reader's position in the timeline.
+document.querySelector('#katexScript')?.addEventListener('load', () => {
+  const top = tl.scrollTop;
+  renderAllMessages();
+  tl.scrollTop = top;
+});
 
 function renderMarkdown(src) {
   const lines = String(src).replace(/\r\n/g, '\n').split('\n');
@@ -556,8 +583,7 @@ function renderMembers() {
       <div class="m-name"><span class="n">${esc(DEV.name)}</span><span class="m-maker">${esc(t('dev.sub'))}</span></div>
       <div class="m-status">${esc(devOnline() ? t('dev.online') : t('dev.offline'))}</div>
     </div>`;
-  ul.append(dev);
-  const on = AI_IDS.filter((id) => S.members[id]?.enabled).length + (devOnline() ? 1 : 0);
+  const on = AI_IDS.filter((id) => S.members[id]?.enabled).length;
   $('#memberCount').textContent = `· ${on + 1}`;
 }
 
@@ -616,7 +642,17 @@ function renderRoom() {
   $('#boostHint').textContent = t(`boost.hint.${bm}`);
   $('#stat').textContent = t('stat.calls', { n: r.calls ?? 0 });
   $('#meName').textContent = nameOf('user');
-  $('#meAv').textContent = nameOf('user').slice(0, 1);
+  const meAvatar = $('#meAv');
+  const ownerAvatar = S.room.userAvatar || S.ownerAvatar;
+  if (ownerAvatar) {
+    if (meAvatar.querySelector('img')?.getAttribute('src') !== ownerAvatar) {
+      const picture = document.createElement('img');
+      picture.src = ownerAvatar;
+      picture.alt = nameOf('user');
+      picture.onerror = () => { meAvatar.textContent = nameOf('user').slice(0, 1); };
+      meAvatar.replaceChildren(picture);
+    }
+  } else meAvatar.textContent = nameOf('user').slice(0, 1);
   const off = !r.running;
   $('#offbar').hidden = !off;
   $('#offbarText').textContent = t(r.sleeping ? 'offbar.sleeping' : 'offbar.off');
@@ -628,7 +664,6 @@ function renderRoom() {
 
 function renderHead() {
   const on = AI_IDS.filter((id) => S.members[id]?.enabled).map(nameOf);
-  if (devOnline()) on.push(DEV.name);
   $('#headSub').textContent = [...on, nameOf('user')].join(t('list.sep'));
   $('#devChip').hidden = !devOnline();
 }
@@ -878,6 +913,7 @@ async function send() {
   $('#attachBtn').disabled = true;
   try {
     const r = await api('/api/send', { text, replyTo, image: pending ? { name: pending.name, data: pending.data } : undefined });
+    if (r.msg?.channel === 'developer') toast('개발자 탭으로 보냈어.', 3600);
     clearReply();
     if (pending) clearAttach();
     if (!r.running) toast(t('toast.roomOff'), 3600);

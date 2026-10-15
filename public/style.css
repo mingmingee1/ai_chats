@@ -1,3 +1,10 @@
+.room-switch { color: var(--accent); font-size: 13px; font-weight: 700; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; white-space: nowrap; text-decoration: none; }
+.code-block { margin: 8px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel-2); color: var(--text); }
+.code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font: 12px var(--mono); border-bottom: 1px solid var(--line); }
+.code-head button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.code-block pre { margin: 0; padding: 12px; overflow-x: auto; text-align: left; }
+.code-block pre code { white-space: pre; background: none; color: inherit; padding: 0; }
+.display-math { overflow-x: auto; padding: 6px 0; }
 /* Pretendard has Latin and Hangul; kana and kanji fall back to a Japanese system font.
    Korean rooms keep the Korean fonts first; Japanese rooms (<html lang="ja">) move the
    Japanese fonts up so kanji never get Korean glyph shapes. */
@@ -83,7 +90,13 @@ svg { display: block; }
   grid-template-columns: 272px minmax(0, 1fr) 420px;
   height: 100vh;
   height: 100dvh;
+  padding-top: 48px;
 }
+.room-tabs { height: 48px; display: flex; align-items: stretch; gap: 4px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.app > .room-tabs { position: absolute; top: 0; left: 0; right: 0; z-index: 15; }
+.room-tabs a { display: flex; align-items: center; justify-content: center; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 650; padding: 0 20px; border-bottom: 3px solid transparent; }
+.room-tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+@media(max-width:820px) { .room-tabs { padding: 0 8px; }.room-tabs a { flex: 1; padding: 0 10px; } }
 .app.ws-closed { grid-template-columns: 272px minmax(0, 1fr) 0; }
 .app.ws-closed .ws { display: none; }
 
@@ -187,6 +200,8 @@ svg { display: block; }
 .me-row { margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 12px; border-radius: 0; }
 .me-av {
   width: 44px; height: 44px; border-radius: 50%; flex: none;
+  min-width: 44px; min-height: 44px; max-width: 44px; max-height: 44px;
+  aspect-ratio: 1; position: relative; overflow: hidden;
   display: grid; place-items: center;
   background: var(--mine); color: #fff; font-weight: 700;
 }
@@ -286,6 +301,7 @@ select {
 .m-head .model { font-size: 11px; color: var(--faint); }
 .line { display: flex; align-items: flex-end; gap: 6px; max-width: min(620px, 100%); position: relative; }
 .bubble {
+  font-size: var(--chat-font-size, 15px);
   background: var(--bubble);
   border: 1px solid var(--bubble-line);
   padding: 8px 12px;
@@ -295,6 +311,11 @@ select {
   box-shadow: 0 1px 1px rgba(20, 24, 36, .03);
 }
 .msg.cont .bubble { border-radius: 16px; }
+.display-settings { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); }
+.display-settings .field { gap: 8px; }
+.display-settings select { max-width: 145px; }
+.me-av img { position: absolute; inset: 0; display: block; width: 44px; height: 44px; min-width: 0; min-height: 0; object-fit: cover; object-position: 50% 45%; border-radius: 50%; }
+.bubble .code-block pre { font-size: .9em; }
 .bubble.media { padding: 0; background: none; border: 0; box-shadow: none; }
 .time { font-size: 11px; color: var(--faint); white-space: nowrap; flex: none; padding-bottom: 2px; }
 .time.dim { visibility: hidden; }
@@ -719,7 +740,7 @@ select {
   .tools button { min-width: 36px; min-height: 36px; }
 }
 @media (max-width: 820px) {
-  .app { height: var(--visual-height, 100dvh); }
+  .app { height: var(--layout-height, 100dvh); }
   textarea, input, select { font-size: 16px; }
   .composer {
     padding-bottom: max(12px, env(safe-area-inset-bottom));
@@ -730,7 +751,7 @@ select {
   .side, .ws {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-    max-height: var(--visual-height, 100dvh);
+    max-height: var(--layout-height, 100dvh);
   }
   .side { padding-left: env(safe-area-inset-left); }
   .ws { padding-right: env(safe-area-inset-right); }

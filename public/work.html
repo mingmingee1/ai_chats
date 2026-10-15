@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
+<title>AI업무방 · 프로젝트</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/work.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css" integrity="sha384-3rdsX6e5mueWyoweR9NIVmtEsUkokpBT/0ALqKKIBMr9j4qhHkaIkAcGgsE6uVlp" crossorigin="anonymous">
+<script id="katexScript" async src="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js" integrity="sha384-QFFtAGzvvj+bfgCGxXJlNZZR1nXEZgvG8tDLCCY1F19xl20WlfTYgguB4VcNdxYk" crossorigin="anonymous"></script>
+</head>
+<body class="work-page">
+<nav class="room-tabs" aria-label="대화 공간"><a href="/">AI단톡방</a><a href="/work.html" aria-current="page">AI업무방</a><a href="/developer.html">개발자</a></nav>
+<div class="work-layout">
+  <aside class="project-sidebar" aria-label="프로젝트 목록">
+    <div class="project-list-head"><h1>프로젝트</h1><button id="createProject" class="primary" type="button">+ 새 프로젝트</button></div>
+    <label class="archive-filter"><input id="showArchived" type="checkbox"> 삭제한 프로젝트 보기</label>
+    <div id="projectList"></div>
+    <details class="display-settings"><summary>글꼴 · 글씨 크기</summary><div class="field"><label for="displayFont">화면 글꼴</label><select id="displayFont"><option value="system">시스템 글꼴</option><option value="pretendard">Pretendard</option></select></div><div class="field"><label for="displaySize">대화 글씨 크기</label><select id="displaySize"><option value="12">12px</option><option value="13">13px</option><option value="14">14px</option><option value="15" selected>15px · 기본</option><option value="16">16px</option><option value="18">18px</option><option value="20">20px</option></select></div></details>
+    <p class="work-hint">프로젝트별 대화와 맥락을 이어가요.<br>삭제한 프로젝트는 복구할 수 있어요.</p>
+  </aside>
+  <main class="work-main">
+    <div id="emptyProject" class="empty-project"><span class="empty-icon">↗</span><h2>함께 풀어볼 일이 있나요?</h2><p>프로젝트에 목표를 적고 멤버들의 의견을 모아 보세요.</p><button id="createFirst" class="primary" type="button">프로젝트 만들기</button></div>
+    <section id="projectView" hidden>
+      <header class="project-head"><div><div class="eyebrow">PROJECT</div><h2 id="projectTitle"></h2></div><button id="archiveProject" type="button">프로젝트 삭제</button></header>
+      <details id="projectBrief" class="project-brief"><summary>목표 · 결정 · 다음 할 일 <span id="briefStatus"></span></summary>
+        <form id="briefForm"><label>프로젝트 이름<input id="projectName" maxlength="120" required></label><label>목표와 제약<textarea id="projectGoal" rows="3" maxlength="4000" placeholder="이번 프로젝트에서 이루려는 것"></textarea></label><div class="brief-columns"><label>결정한 내용<textarea id="projectDecisions" rows="3" maxlength="4000" placeholder="논의 후 직접 확정한 내용을 남겨요"></textarea></label><label>다음 할 일<textarea id="projectNext" rows="3" maxlength="4000" placeholder="누가 무엇을 언제까지 할지"></textarea></label></div><button id="saveBrief" type="submit">변경 저장</button></form>
+      </details>
+      <details class="project-context"><summary>이어지는 맥락 <span id="contextDate"></span></summary><div id="projectContext">정리 단계에서 논의의 흐름을 남길 수 있어요.</div></details>
+      <div id="workMessages" class="work-messages" role="log" aria-label="프로젝트 대화"></div>
+      <form id="workComposer" class="work-composer">
+        <div class="composer-options"><label>진행 단계 <select id="workMode"><option value="discuss">의견 모으기</option><option value="review">검토·보완</option><option value="summary">정리</option></select></label><fieldset id="workMembers"><legend>참여할 멤버</legend></fieldset></div>
+        <p id="modeHint" class="work-hint"></p>
+        <label class="sr-only" for="workInput">프로젝트 메시지</label><textarea id="workInput" rows="3" maxlength="20000" placeholder="목표나 질문을 적어 주세요. Shift+Enter로 줄바꿈"></textarea>
+        <div class="composer-footer"><span id="workStatus" role="status" aria-live="polite"></span><button id="sendWork" class="primary" type="submit">의견 받기</button></div>
+      </form>
+    </section>
+    <p id="workError" class="work-error" role="alert" hidden></p>
+  </main>
+</div>
+<dialog id="createDialog"><form id="createForm"><h2>새 프로젝트</h2><label>이름<input id="newName" required maxlength="120" placeholder="예: 겨울 수업 준비"></label><label>목표<textarea id="newGoal" rows="3" maxlength="4000" placeholder="어떤 결과를 만들고 싶나요?"></textarea></label><p id="createError" class="work-error" role="alert"></p><div class="dialog-actions"><button id="cancelCreate" type="button">취소</button><button id="confirmCreate" class="primary" type="submit">만들기</button></div></form></dialog>
+<script type="module" src="/work.js"></script>
+</body></html>

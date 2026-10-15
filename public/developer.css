@@ -1,0 +1,10 @@
+.developer-main { max-width: 960px; padding: 25px 28px; margin: 0 auto; }
+.developer-main h1 { margin: 0; font-size: 24px; }.developer-main .project-head { margin-bottom: 6px; }
+#devStatus { margin: 6px 0 0; color: var(--muted); font-size: 12px; }#devStatus.online { color: var(--accent); }
+.developer-main .display-settings { margin: 0; border: 0; padding: 0; }.developer-main .display-settings[open] { display: grid; gap: 8px; }
+#devMessages { max-height: 57dvh; min-height: 180px; }#olderDev { margin-top: 8px; font-size: 12px; }
+#devInput { display: block; width: 100%; max-height: 240px; }#devReply { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 9px; }#devReply span { flex: 1; }
+.developer-main .reply-dev { font-size: 11px; padding: 2px 7px; margin-left: 8px; }
+.dev-attachment { display: block; max-width: min(100%,260px); max-height: 320px; object-fit: contain; margin-top: 8px; border-radius: 10px; }
+.dev-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); }.dev-upload input { max-width: 190px; font-size: 12px; }#devFileName { font-size: 11px; }
+@media(max-width:760px) { .developer-main { padding: 18px 12px; }.developer-main h1 { font-size: 21px; }#devMessages { max-height: 55dvh; } }

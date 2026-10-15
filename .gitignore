@@ -2,7 +2,21 @@
 data/
 workspace/
 .env
+.env.*
+!.env.example
 config.json
+
+# local profile photo, credentials, and certificate material
+public/avatars/user-profile.*
+.codex/
+.claude/
+.gemini/
+auth.json
+credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
 
 # your own character sheets (optional looks references)
 assets/sheets/

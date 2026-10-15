@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { startFixture, ROOT } from './helpers.mjs';
+
+test('developer tab and bridge share one private conversation, separate from social state/history/events',async t=>{
+  const f=await startFixture();t.after(f.stop);
+  for(const route of ['/developer.html','/developer.js','/developer.css']) assert.equal((await f.request(route)).status,200);
+  const controller=new AbortController();
+  const events=await fetch(f.base+'/events',{signal:controller.signal});
+  let streamed='';
+  const reader=events.body.getReader();
+  const reading=(async()=>{try{for(;;){const {done,value}=await reader.read();if(done)break;streamed+=new TextDecoder().decode(value);}}catch{}})();
+  t.after(()=>controller.abort());
+  const publicReply=await (await f.request('/api/send',{text:'PUBLIC-HELLO'})).json();
+  assert.equal(publicReply.ok,true);
+  const privateReply=await (await f.request('/api/conversations/developer',{text:'PRIVATE-REQUEST'})).json();
+  assert.equal(privateReply.msg.channel,'developer');
+  const token=fs.readFileSync(path.join(f.home,'.env'),'utf8').match(/^DEV_BRIDGE_TOKEN=(\S+)/m)[1];
+  const headers={Authorization:`Bearer ${token}`,'Content-Type':'application/json'};
+  const post=await fetch(f.base+'/api/dev/messages',{method:'POST',headers,body:JSON.stringify({text:'PRIVATE-ANSWER',reply_to:privateReply.msg.id})});
+  assert.equal(post.status,200);
+  const bridge=await fetch(f.base+'/api/dev/messages?since=0',{headers}).then(r=>r.json());
+  assert.ok(bridge.messages.some(m=>m.text==='PRIVATE-REQUEST'));
+  assert.ok(bridge.messages.some(m=>m.text==='PRIVATE-ANSWER'));
+  assert.ok(!bridge.messages.some(m=>m.text==='PUBLIC-HELLO'));
+  const social=await (await f.request('/api/state')).json();
+  assert.ok(social.messages.some(m=>m.text==='PUBLIC-HELLO'));
+  assert.ok(!social.messages.some(m=>m.text.includes('PRIVATE-')));
+  const history=await (await f.request('/api/history')).json();
+  assert.ok(!history.messages.some(m=>m.text.includes('PRIVATE-')));
+  const dev=await (await f.request('/api/conversations/developer')).json();
+  assert.ok(dev.messages.some(m=>m.text==='PRIVATE-ANSWER'));
+  assert.ok(!dev.messages.some(m=>m.text==='PUBLIC-HELLO'));
+  controller.abort();await reading;
+  assert.match(streamed,/PUBLIC-HELLO/);
+  assert.doesNotMatch(streamed,/PRIVATE-/);
+  const raw=fs.readFileSync(path.join(f.home,'data/messages.jsonl'),'utf8');
+  assert.match(raw,/PUBLIC-HELLO/);assert.match(raw,/PRIVATE-REQUEST/);
+});
+
+test('owner tags route to developer tab and private images do not reach social history',async t=>{
+  const f=await startFixture();t.after(f.stop);
+  const tagged=await (await f.request('/api/send',{text:'@개발자 TAGGED-PRIVATE'})).json();
+  assert.equal(tagged.msg.channel,'developer');
+  const image=fs.readFileSync(path.join(ROOT,'public/icons/icon-192.png')).toString('base64');
+  const response=await f.request('/api/conversations/developer',{text:'',image:{name:'test.png',data:image}});
+  assert.equal(response.status,200);
+  const {msg}=await response.json();assert.ok(msg.attach.upload);
+  const social=await (await f.request('/api/state')).json();
+  assert.ok(!social.messages.some(m=>m.id===msg.id||m.id===tagged.msg.id));
+  const dev=await (await f.request('/api/conversations/developer')).json();
+  assert.ok(dev.messages.some(m=>m.id===msg.id));
+  assert.equal((await f.request('/ws/'+msg.attach.path)).status,200);
+  const forbidden=await fetch(f.base+'/api/conversations/developer',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://other.example'},body:'{"text":"blocked"}'});
+  assert.equal(forbidden.status,403);
+});

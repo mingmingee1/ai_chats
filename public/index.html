@@ -2,11 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
 <title data-i18n="app.title">AI 단톡방</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css" integrity="sha384-3rdsX6e5mueWyoweR9NIVmtEsUkokpBT/0ALqKKIBMr9j4qhHkaIkAcGgsE6uVlp" crossorigin="anonymous">
+<script id="katexScript" async src="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js" integrity="sha384-QFFtAGzvvj+bfgCGxXJlNZZR1nXEZgvG8tDLCCY1F19xl20WlfTYgguB4VcNdxYk" crossorigin="anonymous"></script>
 <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,6 +18,7 @@
 </head>
 <body>
 <div class="app" id="app">
+  <nav class="room-tabs" aria-label="대화 공간"><a href="/" aria-current="page">AI단톡방</a><a href="/work.html">AI업무방</a><a href="/developer.html">개발자</a></nav>
 
   <aside class="side" id="side" aria-label="멤버와 방 설정" data-i18n-aria="side.aria">
     <div class="side-head">
@@ -65,6 +68,10 @@
         </div>
       </div>
       <p class="hint" id="boostHint"></p>
+      <div class="display-settings">
+        <div class="field"><label class="field-label" for="displayFont">화면 글꼴</label><select id="displayFont"><option value="system">시스템 글꼴</option><option value="pretendard">Pretendard</option></select></div>
+        <div class="field"><label class="field-label" for="displaySize">대화 글씨 크기</label><select id="displaySize"><option value="12">12px</option><option value="13">13px</option><option value="14">14px</option><option value="15" selected>15px · 기본</option><option value="16">16px</option><option value="18">18px</option><option value="20">20px</option></select></div>
+      </div>
       <div class="stat" id="stat"></div>
     </div>
   </aside>

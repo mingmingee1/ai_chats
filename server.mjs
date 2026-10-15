@@ -19,6 +19,8 @@ import { DevBridge, devChainState } from './lib/dev.mjs';
 import { ExternalGate } from './lib/external.mjs';
 import { World } from './lib/world.mjs';
 import { shootWorld } from './lib/worldshot.mjs';
+import { Workroom } from './lib/workroom.mjs';
+import { memberStore, memberAction, developerMessages, tagsDeveloper } from './lib/member-visibility.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -96,6 +98,7 @@ const HOME_DIR = process.env.CHATROOM_HOME ? path.resolve(process.env.CHATROOM_H
 if (process.env.PORT) cfg.port = Number(process.env.PORT);
 const store = new Store(HOME_DIR);
 const adapters = new Adapters(HOME_DIR, cfg);
+const workroom = new Workroom(HOME_DIR, cfg);
 // Shared building world (lib/world.mjs), watched in public/world.html.
 const world = new World(HOME_DIR, AI_IDS);
 const avail = adapters.available();
@@ -344,6 +347,7 @@ const tx = () => pick(T);
 
 const clients = new Set();
 function broadcast(type, data) {
+  if ((type === 'msg' || type === 'msgupdate') && !memberStore(store).byId.has(data.id)) return;
   const s = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(s);
 }
@@ -369,6 +373,7 @@ function roomView() {
     running: room.running, sleeping: room.sleeping, speed: room.speed, autoSleepMin: room.autoSleepMin,
     calls: room.calls, roomName: cfg.roomName, userName: cfg.userName, lang: getLang(), boostMode: boostMode(),
     chatOnly: !!cfg.chatOnly,
+    userAvatar: /^\/avatars\/[\w.-]+$/.test(cfg.userAvatar || '') ? cfg.userAvatar : null,
     dev: { online: devBridge.online },
   };
 }
@@ -408,7 +413,7 @@ function tick() {
   const quietMs = now - Math.max(last?.ts ?? 0, room.startedAt ?? 0);
   const aiBubbles = store.recent(60).filter((m) => AI_IDS.includes(m.from) && now - m.ts < 60000).length;
   // Dev <-> AI back-and-forth guard: while it holds, only the user's messages wake the AIs.
-  const chain = cfg.dev.enabled ? devChainState(store.recent(80), now, { ...cfg.dev, userName: cfg.userName }) : null;
+  const chain = null; // Developer conversations are absent from the AI view.
   noteDevPause(chain);
   if (!chain) maybeSpark(now, sp);
 
@@ -416,7 +421,7 @@ function tick() {
     const a = agents[id];
     if (!isActive(id) || a.busy || now < a.offlineUntil) continue;
 
-    const fresh = store.after(a.seen).filter((m) => m.from !== id);
+    const fresh = memberStore(store).after(a.seen).filter((m) => m.from !== id);
     if (chain && !fresh.some((m) => m.from === 'user')) {
       a.wakeAt = null;
       continue;
@@ -586,7 +591,7 @@ async function askRouted(a, reason, openFile, deep) {
 
 // Photos the user posted since this member last looked (newest 3), for members that can see.
 function unseenUploads(a) {
-  return store.after(a.seen)
+  return memberStore(store).after(a.seen)
     .filter((m) => m.attach?.upload && fs.existsSync(store.abs(m.attach.path)))
     .slice(-3);
 }
@@ -620,12 +625,12 @@ async function ask(a, reason, openFile, deep = null) {
   a.lastMs = res.ms;
   store.log(a.id, `turn reason=${reason} model=${deep ? `${boostLabel(a.id)} BOOST` : defaultLabel(a.id)}${images.length ? ` images=${images.length}` : ''} ms=${res.ms} ok=${res.ok}\n${res.text.slice(0, 4000)}${res.detail ? `\nDETAIL ${res.detail}` : ''}`);
   if (!res.ok) throw new Error(res.detail || 'empty reply');
-  const act = parseAction(res.text);
+  const act = memberAction(parseAction(res.text), store);
   if (cfg.chatOnly && act) {
     const dropped = CHAT_ONLY_DROP.filter((key) => key in act);
     for (const key of dropped) delete act[key];
     // Keep open only for the host's uploaded photos, never workspace text or generated art.
-    if (act.open && !uploadedPhoto(act.open)) { delete act.open; dropped.push('open'); }
+    if (act.open && !memberStore(store).messages.some(m => m.from === 'user' && m.attach?.upload && m.attach.path === act.open)) { delete act.open; dropped.push('open'); }
     if (dropped.length) store.log(a.id, `chatOnly ignored: ${dropped.join(', ')}`);
   }
   if (!act) store.log(a.id, 'could not parse a JSON action');
@@ -642,7 +647,7 @@ async function runTurn(a) {
   const snapshot = store.lastId;
   let spoke = false;
   // Routing is decided fresh every turn (see lib/router.mjs); no boost unless something asks for it.
-  let deep = hasBoost(a.id) ? router.decide(a.id, store, a.seen, boostMode()) : null;
+  let deep = hasBoost(a.id) ? router.decide(a.id, memberStore(store), a.seen, boostMode()) : null;
   try {
     if (deep) startDeep(a, deep);
     let r = await askRouted(a, reason, null, deep);
@@ -736,6 +741,7 @@ function typingDelay(text) {
 // Apply one parsed action. Returns true if the AI said something visible.
 // meta: {model, deep} stamped on the messages this turn posts.
 async function perform(a, act, snapshot, reason, meta = {}) {
+  act = memberAction(act, store);
   const id = a.id;
   let visible = false;
 
@@ -748,13 +754,14 @@ async function perform(a, act, snapshot, reason, meta = {}) {
   if (typeof act.note_replace === 'string' && act.note_replace.trim()) { store.writeNote(id, act.note_replace); notesChanged = true; }
   if (typeof act.note_add === 'string' && act.note_add.trim()) { store.appendNote(id, act.note_add); notesChanged = true; }
   if (notesChanged) broadcast('notes', { id, text: store.readNote(id) });
+  if (typeof act.context_summary === 'string') store.writeContext(id, act.context_summary, snapshot);
 
   let msgs = Array.isArray(act.messages) ? act.messages : (typeof act.messages === 'string' ? [act.messages] : []);
   msgs = msgs.map((s) => String(s ?? '').trim()).filter(Boolean).slice(0, 4).map((s) => s.slice(0, 2000));
   if (act.action === 'pass' && !act.show) msgs = [];
 
   // If the room moved on a lot while this AI was thinking, drop the stale chatter.
-  const movedOn = store.after(snapshot).filter((m) => m.from !== id && m.from !== 'system').length;
+  const movedOn = memberStore(store).after(snapshot).filter((m) => m.from !== id && m.from !== 'system').length;
   if (msgs.length && movedOn >= 3 && reason !== 'urgent') {
     store.log(id, `dropped stale messages (${movedOn} new since snapshot)`);
     msgs = [];
@@ -1154,10 +1161,15 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       room: roomView(),
       members: AI_IDS.map(memberView),
-      messages: store.recent(300),
+      messages: memberStore(store).recent(300),
       files: cfg.chatOnly ? [] : store.listFiles(),
       usage: usageView(),
     });
+  }
+  if (req.method === 'GET' && p === '/api/conversations/developer') {
+    const before = Number(url.searchParams.get('before')) || Infinity;
+    const messages = developerMessages(store).filter(m => m.id < before).slice(-300);
+    return sendJson(res, 200, { messages, online: devBridge.online, userName: cfg.userName, userAvatar: roomView().userAvatar });
   }
   if (cfg.chatOnly && (p === '/api/world' || (p === '/api/file' && !uploadedPhoto(url.searchParams.get('path'))))) {
     return sendJson(res, 403, { error: 'chat-only mode' });
@@ -1179,7 +1191,7 @@ async function handleApi(req, res, url) {
   }
   if (req.method === 'GET' && p === '/api/history') {
     const before = Number(url.searchParams.get('before')) || Infinity;
-    const older = store.messages.filter((m) => m.id < before).slice(-200);
+    const older = memberStore(store).messages.filter((m) => m.id < before).slice(-200);
     return sendJson(res, 200, { messages: older });
   }
 
@@ -1187,11 +1199,24 @@ async function handleApi(req, res, url) {
   if (!trustedPost(req)) return sendJson(res, 403, { error: 'forbidden' });
   let body;
   try {
-    body = await readBody(req, p === '/api/send' ? UPLOAD_BODY_LIMIT : undefined);
+    body = await readBody(req, p === '/api/send' || p === '/api/conversations/developer' ? UPLOAD_BODY_LIMIT : undefined);
   } catch (e) {
     return sendJson(res, e.message === 'too large' ? 413 : 400, { error: e.message === 'too large' ? tx().tooLarge : 'bad json' });
   }
 
+  if (p === '/api/conversations/developer') {
+    const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 20000) : '';
+    if (!text && !body?.image?.data) return sendJson(res, 400, { error: '메시지를 적어 줘.' });
+    let attach;
+    if (body?.image?.data) {
+      try { attach = { path: saveUpload(body.image), upload: true }; }
+      catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    const replyTo = Number(body.replyTo);
+    const target = developerMessages(store).find(m => m.id === replyTo);
+    const msg = post({ from: 'user', channel: 'developer', text, replyTo: target?.id, attach });
+    return sendJson(res, 200, { ok: true, msg });
+  }
   if (p === '/api/send' && body.sticker && cfg.chatOnly) return sendJson(res, 403, { error: 'chat-only mode' });
   if (p === '/api/send' && body.sticker) {
     const rel = stickerPath(body.sticker);
@@ -1225,8 +1250,8 @@ async function handleApi(req, res, url) {
       broadcast('ws', store.listFiles());
     }
     const replyTo = Number(body.replyTo);
-    const msg = post({ from: 'user', text, replyTo: store.byId.has(replyTo) ? replyTo : undefined, attach });
-    if (attach) describeUpload(msg);
+    const msg = post({ from: 'user', text, channel: tagsDeveloper(text) || (store.byId.has(replyTo) && !memberStore(store).byId.has(replyTo)) ? 'developer' : undefined, replyTo: store.byId.has(replyTo) ? replyTo : undefined, attach });
+    if (attach && memberStore(store).byId.has(msg.id)) describeUpload(msg);
     if (!room.running && room.sleeping) startRoom();
     return sendJson(res, 200, { ok: true, msg, running: room.running });
   }
@@ -1314,6 +1339,7 @@ async function handleRequest(req, res) {
     }
     if (cfg.chatOnly && p.startsWith('/api/dev/workspace')) return sendJson(res, 403, { error: 'chat-only mode' });
     if (p.startsWith('/api/dev/')) { await devBridge.handle(req, res, url, { sendJson, readBody }); return; }
+    if (p.startsWith('/api/work/')) return await workroom.handle(req, res, url, { sendJson, readBody, trustedPost });
     if (p.startsWith('/api/')) return await handleApi(req, res, url);
     if (p.startsWith('/ws/')) {
       let rel;
@@ -1380,7 +1406,7 @@ if (room.running) startRoom();
 // Photos posted before descriptions existed (or while the server was down): describe the
 // last few, one at a time.
 (async () => {
-  const todo = store.recent(300).filter((m) => m.attach?.upload && !m.attach.desc && fs.existsSync(store.abs(m.attach.path))).slice(-5);
+  const todo = memberStore(store).recent(300).filter((m) => m.attach?.upload && !m.attach.desc && fs.existsSync(store.abs(m.attach.path))).slice(-5);
   for (const m of todo) await describeUpload(m);
 })();
 
