@@ -4,11 +4,13 @@
 AI 단톡방·업무방·개발자 탭, 프사와 사용자 설정은 기존 PC 서버의 것을 사용합니다.
 대화와 기억을 APK에 복사하지 않으며 AI는 기존 PC의 CLI로 실행됩니다.
 
-[APK 다운로드](https://github.com/mingmingee1/ai_chats/raw/refs/heads/main/mobile/releases/ai-chats-1.0.0.apk) · [파일 체크섬](releases/SHA256SUMS)
+[APK 다운로드 · 1.0.1](https://raw.githubusercontent.com/mingmingee1/ai_chats/main/mobile/releases/ai-chats-1.0.1.apk) · [파일 체크섬](releases/SHA256SUMS)
+
+1.0.1에서는 앱 자체의 상단 바를 없애고, 안드로이드 상태 표시줄과 하단 내비게이션 영역을 현재 채팅 배경색에 맞춥니다. 채팅방의 밝은 테마·어두운 테마를 바꾸면 함께 반영됩니다. 기존 1.0.0 사용자는 앱을 삭제하지 않고 새 APK를 열어 **업데이트**하면 됩니다. 연결 주소와 로그인은 유지되며, 이 화면 변경을 위해 PC를 다시 설정할 필요는 없습니다.
 
 ## 처음 한 번 연결
 
-1. 휴대폰에 `ai-chats-1.0.0.apk`를 설치합니다. 다운로드한 앱의 설치 허용이 필요할 수 있습니다.
+1. 휴대폰에 `ai-chats-1.0.1.apk`를 설치합니다. 다운로드한 앱의 설치 허용이 필요할 수 있습니다.
 2. PC 개발자는 기존 변경을 보존하면서 최신 GitHub 코드를 반영합니다. `data/`, `workspace/`, `config.json`을 새 폴더의 것으로 덮어쓰지 않습니다.
 3. PC에서 `setup-mobile.bat`을 실행합니다. Tailscale이 HTTPS/Serve 활성화 링크를 출력하면 해당 링크를 열어 활성화합니다. 다른 서비스가 443 포트를 쓰면 도우미가 덮어쓰지 않고 중단합니다.
 4. 기존 서버 창에서 Ctrl+C로 종료하고 같은 폴더의 `start.bat`을 다시 실행합니다.
@@ -21,7 +23,9 @@ Tailscale HTTPS를 처음 활성화하면 PC의 인증서 도메인 이름이 �
 
 ## 평소 업데이트
 
-PC에서 파일 수정 → 필요한 경우 서버 재시작 → 앱 위쪽 ↻ 또는 메뉴의 **최신 화면 불러오기**.
+PC에서 파일 수정 → 필요한 경우 서버 재시작 → 휴대폰 홈 화면의 **AI 단톡방 아이콘 길게 누르기 → 새로고침**.
+
+주소 변경·로그아웃·앱 정보는 **앱 아이콘 길게 누르기 → 앱 설정**에서 엽니다. 앱 안의 채팅방 메뉴와 탭은 기존 PC 화면 그대로 사용할 수 있습니다.
 
 GitHub 업로드와 APK 재설치는 일반적인 화면·프롬프트·서버 기능 변경에 필요하지 않습니다. 앱 권한이나 안드로이드 전용 기능을 수정할 때만 새 APK가 필요합니다.
 
@@ -46,7 +50,7 @@ PC Tailscale Serve
 ```sh
 python3 mobile/android/build-apk.py --sdk /path/to/android-sdk \
   --keystore /private/ai-chats.jks --password-file /private/password.txt \
-  --out /path/to/ai-chats-1.0.0.apk
+  --out /path/to/ai-chats-1.0.1.apk
 ```
 
 키 별칭은 `aichats`입니다. 업데이트 APK는 최초 설치와 **동일한 서명 키**로 서명해야 합니다. 서명 키·비밀번호 파일은 GitHub에 올리지 말고 별도로 보관하세요. Gradle/Android Studio로 만든 debug APK는 제공된 APK와 서명이 달라 그대로 덮어 설치할 수 없습니다.

@@ -2,9 +2,12 @@ package ai.chats.mobile;
 
 import android.app.*;
 import android.content.*;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.*;
@@ -15,6 +18,7 @@ import android.widget.*;
 import org.json.JSONObject;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /** Installed Android shell. All room UI comes from the live PC server. */
 public final class MainActivity extends Activity {
@@ -22,21 +26,37 @@ public final class MainActivity extends Activity {
     private static final int INK = Color.rgb(28, 41, 37);
     private static final int BACKGROUND = Color.rgb(245, 246, 242);
     private static final int PICK_CONNECTION = 100, PICK_PHOTO = 101;
+    private static final String MENU_ACTION = "ai.chats.mobile.MENU", REFRESH_ACTION = "ai.chats.mobile.REFRESH";
     private LinearLayout root;
     private FrameLayout content;
-    private ProgressBar progress;
-    private TextView title;
     private WebView web;
     private String origin = "";
     private ValueCallback<Uri[]> photoCallback;
     private boolean pageFailed;
     private boolean setupScreen;
+    private int pageColor = BACKGROUND;
+    private boolean resumed;
+    private String themeScript = "null";
+    private final Handler themeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable themeWatcher = new Runnable() {
+        @Override public void run() {
+            if (!resumed) return;
+            syncPageColor();
+            themeHandler.postDelayed(this, 1000);
+        }
+    };
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         origin = getPreferences(0).getString("origin", "");
         try { if (!origin.isEmpty()) origin = ConnectionAddress.normalize(origin); }
         catch (Exception e) { origin = ""; }
+        pageColor = getPreferences(0).getInt("pageColor", BACKGROUND);
+        try (InputStream input = getAssets().open("system-theme.js"); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] bytes = new byte[1024]; int count;
+            while ((count = input.read(bytes)) != -1) out.write(bytes, 0, count);
+            themeScript = new String(out.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException ignored) { }
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -47,15 +67,6 @@ public final class MainActivity extends Activity {
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        LinearLayout toolbar = new LinearLayout(this); toolbar.setGravity(Gravity.CENTER_VERTICAL); toolbar.setPadding(dp(12), 0, dp(6), 0);
-        title = text("AI 단톡방", 15, INK); title.setTypeface(null, Typeface.BOLD);
-        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1)); title.setGravity(Gravity.CENTER_VERTICAL);
-        Button reload = button("↻", () -> { if (web != null && !setupScreen) { showWeb(); web.reload(); } });
-        reload.setContentDescription("최신 화면으로 새로고침"); toolbar.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(44)));
-        Button menu = button("⋮", this::menu); menu.setContentDescription("앱 설정"); toolbar.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(44)));
-        root.addView(toolbar);
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setVisibility(View.GONE);
-        root.addView(progress, new LinearLayout.LayoutParams(-1, dp(2)));
         content = new FrameLayout(this); root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         if (origin.isEmpty()) showSetup();
@@ -63,11 +74,13 @@ public final class MainActivity extends Activity {
             createWeb();
             if (saved == null || web.restoreState(saved) == null) web.loadUrl(origin + "/");
         }
+        installShortcuts();
+        root.post(() -> handleShortcut(getIntent()));
     }
 
     private void createWeb() {
         if (web != null) { web.stopLoading(); web.destroy(); }
-        web = new WebView(this); web.setBackgroundColor(BACKGROUND);
+        web = new WebView(this); web.setBackgroundColor(pageColor);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false); s.setAllowContentAccess(false);
@@ -75,7 +88,7 @@ public final class MainActivity extends Activity {
         s.setSafeBrowsingEnabled(true); s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false); s.setMediaPlaybackRequiresUserGesture(true);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setUserAgentString(s.getUserAgentString() + " AIChatsAndroid/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " AIChatsAndroid/1.0.1");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         web.setWebViewClient(new WebViewClient() {
@@ -86,12 +99,11 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
-                pageFailed = false; progress.setVisibility(View.VISIBLE);
+                pageFailed = false;
             }
             @Override public void onPageFinished(WebView view, String url) {
-                progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
-                if (!pageFailed && !setupScreen) title.setText("AI 단톡방");
+                syncPageColor();
             }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.cancel();
@@ -118,7 +130,6 @@ public final class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
-            @Override public void onProgressChanged(WebView view, int value) { progress.setProgress(value); }
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (photoCallback != null) photoCallback.onReceiveValue(null);
                 photoCallback = callback;
@@ -139,6 +150,7 @@ public final class MainActivity extends Activity {
     private void showWeb() {
         setupScreen = false; content.removeAllViews();
         if (web != null) content.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        applySystemColor(pageColor);
     }
     private LinearLayout card(String heading, String description) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
@@ -149,7 +161,7 @@ public final class MainActivity extends Activity {
     }
     private void placeCard(LinearLayout card) {
         content.removeAllViews(); ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.addView(card);
-        content.addView(scroll, new FrameLayout.LayoutParams(-1, -1)); progress.setVisibility(View.GONE);
+        content.addView(scroll, new FrameLayout.LayoutParams(-1, -1)); applySystemColor(BACKGROUND);
     }
     private void showSetup() {
         setupScreen = true;
@@ -190,7 +202,7 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("AI 단톡방")
             .setItems(new String[]{"최신 화면 불러오기", "채팅방 홈", "연결 주소 변경", "로그아웃", "앱 정보"}, (dialog, which) -> {
                 if (which == 2) { showSetup(); return; }
-                if (which == 4) { new AlertDialog.Builder(this).setTitle("AI 단톡방 1.0.0")
+                if (which == 4) { new AlertDialog.Builder(this).setTitle("AI 단톡방 1.0.1")
                     .setMessage("PC의 최신 화면을 불러오는 안드로이드 앱입니다.\n\n대화·프사·설정 변경은 앱 새로고침으로 반영돼요.\n\n앱을 닫아도 PC에서 대화는 계속될 수 있습니다. 현재 버전은 백그라운드 새 메시지 알림을 제공하지 않습니다.")
                     .setPositiveButton("확인", null).show(); return; }
                 if (origin.isEmpty()) { showSetup(); return; }
@@ -200,6 +212,73 @@ public final class MainActivity extends Activity {
                 else web.loadUrl(origin + (which == 3 ? "/logout" : "/"));
             }).show();
     }
+    private void syncPageColor() {
+        final WebView current = web;
+        if (!resumed || setupScreen || pageFailed || current == null || current.getParent() != content
+            || !ConnectionAddress.sameOrigin(origin, current.getUrl())) return;
+        current.evaluateJavascript(themeScript, value -> {
+            if (!resumed || setupScreen || pageFailed || current != web || current.getParent() != content) return;
+            try {
+                int rgb = Integer.parseInt(value);
+                if (rgb < 0 || rgb > 0xFFFFFF) return;
+                int color = 0xFF000000 | rgb;
+                if (pageColor != color) {
+                    pageColor = color;
+                    getPreferences(0).edit().putInt("pageColor", color).apply();
+                    applySystemColor(color);
+                }
+            } catch (NumberFormatException ignored) { }
+        });
+    }
+    private void applySystemColor(int color) {
+        root.setBackgroundColor(color);
+        Window window = getWindow();
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(color));
+        window.setStatusBarColor(color); window.setNavigationBarColor(color);
+        if (Build.VERSION.SDK_INT >= 28) window.setNavigationBarDividerColor(color);
+        if (Build.VERSION.SDK_INT >= 29) {
+            window.setNavigationBarContrastEnforced(false);
+            window.setStatusBarContrastEnforced(false);
+        }
+        // Keep system icons legible when the web page changes theme.
+        boolean light = (0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color)) > 150;
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(light ? mask : 0, mask);
+            }
+        } else {
+            View decor = window.getDecorView();
+            int mask = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            decor.setSystemUiVisibility(light ? decor.getSystemUiVisibility() | mask : decor.getSystemUiVisibility() & ~mask);
+        }
+    }
+    private void installShortcuts() {
+        try {
+            ShortcutManager manager = getSystemService(ShortcutManager.class);
+            if (manager == null) return;
+            Icon icon = Icon.createWithResource(this, R.drawable.app_icon);
+            manager.setDynamicShortcuts(Arrays.asList(
+                new ShortcutInfo.Builder(this, "app-menu").setShortLabel("앱 설정").setIcon(icon)
+                    .setIntent(shortcutIntent(MENU_ACTION)).build(),
+                new ShortcutInfo.Builder(this, "refresh").setShortLabel("새로고침").setIcon(icon)
+                    .setIntent(shortcutIntent(REFRESH_ACTION)).build()));
+        } catch (RuntimeException ignored) { }
+    }
+    private Intent shortcutIntent(String action) {
+        return new Intent(this, MainActivity.class).setAction(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    }
+    private void handleShortcut(Intent intent) {
+        String action = intent.getAction();
+        intent.setAction(Intent.ACTION_MAIN);
+        if (MENU_ACTION.equals(action)) menu();
+        else if (REFRESH_ACTION.equals(action) && !origin.isEmpty()) {
+            if (web == null) createWeb(); else showWeb();
+            web.clearCache(true); web.loadUrl(origin + "/");
+        }
+    }
+    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); handleShortcut(intent); }
     private void openExternal(Uri uri) {
         String scheme = uri.getScheme();
         if (!"https".equals(scheme) && !"http".equals(scheme) && !"mailto".equals(scheme)) { toast("지원하지 않는 링크입니다."); return; }
@@ -237,9 +316,10 @@ public final class MainActivity extends Activity {
         else moveTaskToBack(true);
     }
     @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); if (web != null) web.saveState(state); }
-    @Override protected void onPause() { if (web != null) web.onPause(); CookieManager.getInstance().flush(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
+    @Override protected void onPause() { resumed = false; themeHandler.removeCallbacks(themeWatcher); if (web != null) web.onPause(); CookieManager.getInstance().flush(); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; if (web != null) web.onResume(); themeHandler.removeCallbacks(themeWatcher); themeHandler.post(themeWatcher); }
     @Override protected void onDestroy() {
+        resumed = false; themeHandler.removeCallbacks(themeWatcher);
         if (photoCallback != null) photoCallback.onReceiveValue(null);
         if (web != null) { content.removeView(web); web.stopLoading(); web.destroy(); }
         super.onDestroy();

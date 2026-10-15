@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_HOME', ''))
 parser.add_argument('--keystore', required=True)
 parser.add_argument('--password-file', required=True)
-parser.add_argument('--out', default=str(ROOT/'app/build/ai-chats-1.0.0.apk'))
+parser.add_argument('--out', default=str(ROOT/'app/build/ai-chats-1.0.1.apk'))
 args = parser.parse_args()
 sdk = pathlib.Path(args.sdk).resolve(); tools = sdk/'build-tools/35.0.0'; android = sdk/'platforms/android-35/android.jar'
 if not android.is_file(): raise SystemExit('Install platforms;android-35 and build-tools;35.0.0 first.')
@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='ai-chats-build-') as temp:
     manifest.write(build/'AndroidManifest.xml', encoding='utf-8', xml_declaration=True)
     run(tools/'aapt2', 'compile', '--dir', ROOT/'app/src/main/res', '-o', build/'resources.zip')
     run(tools/'aapt2', 'link', '-o', build/'unsigned.apk', '-I', android, '--manifest', build/'AndroidManifest.xml',
-        '--java', generated, '--min-sdk-version', '26', '--target-sdk-version', '35', '--version-code', '1', '--version-name', '1.0.0', build/'resources.zip')
+        '--java', generated, '-A', ROOT/'app/src/main/assets', '--min-sdk-version', '26', '--target-sdk-version', '35', '--version-code', '2', '--version-name', '1.0.1', build/'resources.zip')
     sources = sorted((ROOT/'app/src/main/java').rglob('*.java')) + sorted(generated.rglob('*.java'))
     boot = str(tools/'core-lambda-stubs.jar') + os.pathsep + str(android)
     run('java', '-m', 'jdk.compiler/com.sun.tools.javac.Main', '-encoding', 'UTF-8', '-source', '8', '-target', '8', '-bootclasspath', boot, '-d', classes, *sources)
