@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import https from 'node:https';
+import { X509Certificate } from 'node:crypto';
 import { once } from 'node:events';
 import { execFileSync } from 'node:child_process';
 import { ExternalGate, createWindowsCertificate } from '../lib/external.mjs';
@@ -75,6 +76,8 @@ test('Windows certificate path uses encoded PowerShell and preserves HTTPS passw
     assert.deepEqual(args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-EncodedCommand']);
     const script = Buffer.from(args[3], 'base64').toString('utf16le');
     assert.match(script, /CertificateRequest/);
+    assert.match(script, /RSACng\]::new\(2048\)/);
+    assert.doesNotMatch(script, /\.KeySize\s*=/);
     assert.doesNotMatch(script, /ExecutionPolicy|New-SelfSignedCertificate|Cert:\\/);
     assert.equal(script.includes(home), false);
     fs.writeFileSync(options.env.CHATROOM_CERT_PFX, supplied.pfx);
@@ -131,5 +134,6 @@ test('Native Windows creates a certificate and serves verified HTTPS without Ope
   const credentials = gate.tls();
   assert.ok(credentials.pfx);
   const cert = fs.readFileSync(path.join(home, 'data/tls/windows-cert.pem'));
+  assert.equal(new X509Certificate(cert).publicKey.asymmetricKeyDetails.modulusLength, 2048);
   await checkLogin(t, gate, credentials, cert);
 });
