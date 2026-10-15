@@ -27,7 +27,7 @@ const EXAMPLE = path.join(ROOT, 'config.example.json');
 const ORIG_PATH = process.env.PATH || '';
 
 // Official install commands (Windows: PowerShell, macOS/Linux: sh). Sources:
-// code.claude.com/docs/en/setup, github.com/openai/codex, docs.x.ai/build/overview,
+// code.claude.com/docs/en/setup, github.com/openai/codex, dev.meta.ai/docs/muse-code,
 // antigravity.google/docs/cli/install
 const CLIS = [
   {
@@ -49,10 +49,10 @@ const CLIS = [
     login: ['login'],
   },
   {
-    id: 'grok', bin: 'grok', member: 'Grok', product: 'Grok Build CLI',
-    need: { ko: 'SuperGrok 또는 X Premium+', en: 'SuperGrok or X Premium+', ja: 'SuperGrok または X Premium+' },
-    win: 'irm https://x.ai/cli/install.ps1 | iex',
-    unix: 'curl -fsSL https://x.ai/cli/install.sh | bash',
+    id: 'muse', bin: 'muse', member: 'Muse', product: 'Muse Code',
+    need: { ko: 'Meta 계정 (Muse 구독 또는 API 크레딧)', en: 'a Meta account (Muse subscription or API credits)', ja: 'Metaアカウント（MuseサブスクリプションまたはAPIクレジット）' },
+    win: 'irm https://dev.meta.ai/install.ps1 | iex',
+    unix: 'curl -fsSL https://dev.meta.ai/install.sh | sh',
     login: ['login'],
   },
   {
@@ -69,6 +69,14 @@ const CLIS = [
 
 const T = {
   ko: {
+    museLoginUnknown: "확인 명령이 없어서 테스트 대화로 확인해",
+    stepPhone: "폰에서 접속",
+    phoneQ: "폰에서도 접속할까? (같은 와이파이)",
+    phoneHint: "같은 와이파이의 폰에서 서버에 표시되는 LAN 주소로 접속해. 비밀번호는 data/external-password.txt에 있어. 자체서명 인증서라 첫 접속 때 경고를 한 번 넘겨야 해. 공유기 포트포워딩은 하지 않아.",
+    firewallHint: "Windows 방화벽의 개인 네트워크에서만 아래 포트를 허용해. 관리자 권한이 필요할 수 있어.",
+    firewallQ: "이 방화벽 규칙을 지금 추가할까?",
+    firewallFail: "방화벽 규칙을 추가하지 못했어. 필요하면 관리자 터미널에서 위 명령을 실행해.",
+
     langRetry: '1, 2, 3 중에서 골라 줘.',
     langNote: '방 화면도, 멤버들 대화도 한국어로 돼.',
     title: 'AI 단톡방 설치 도우미',
@@ -142,6 +150,14 @@ const T = {
     loginUnknown: '로그인 확인 못 함',
   },
   en: {
+    museLoginUnknown: "No status command is known; verify with a test conversation",
+    stepPhone: "Phone access",
+    phoneQ: "Connect from a phone too? (same Wi-Fi)",
+    phoneHint: "On the same Wi-Fi, open a LAN address printed by the server. The password is in data/external-password.txt. Accept the self-signed certificate warning on first access. No router port forwarding is configured.",
+    firewallHint: "The following Windows rule allows this port on private networks only. Administrator permission may be needed.",
+    firewallQ: "Add this firewall rule now?",
+    firewallFail: "Could not add the firewall rule. Run the command above in an administrator terminal if needed.",
+
     langRetry: 'Pick 1, 2 or 3.',
     langNote: "The room's screens and the members' chat will be in English.",
     title: 'AI Group Chat setup',
@@ -215,6 +231,14 @@ const T = {
     loginUnknown: "couldn't check login",
   },
   ja: {
+    museLoginUnknown: "状態確認コマンドは未確認なので、テスト会話で確認してね",
+    stepPhone: "スマホから接続",
+    phoneQ: "スマホからも接続する？（同じWi-Fi）",
+    phoneHint: "同じWi-Fiのスマホでサーバーに表示されるLANアドレスを開いてね。パスワードはdata/external-password.txt。自己署名証明書なので初回は警告を確認して進んでね。ルーターのポート転送は設定しないよ。",
+    firewallHint: "次のWindowsルールはプライベートネットワークだけでポートを許可するよ。管理者権限が必要な場合がある。",
+    firewallQ: "このファイアウォール規則を今追加する？",
+    firewallFail: "規則を追加できなかったよ。必要なら管理者ターミナルで上のコマンドを実行してね。",
+
     langRetry: '1、2、3から選んでね。',
     langNote: 'ルームの画面もメンバーの会話も日本語になるよ。',
     title: 'AIグループチャット セットアップ',
@@ -461,12 +485,9 @@ async function loggedIn(c, bin) {
       if (/logged in/i.test(t)) return { ok: true, note: (t.match(/using (ChatGPT)/i) || [])[1] || '' };
       return { ok: null };
     }
-    if (c.id === 'grok') {
-      const r = await run(bin, ['models'], { cwd: TMP, timeoutMs: 40000 });
-      const t = r.stdout + r.stderr;
-      if (/you are logged in/i.test(t)) return { ok: true };
-      if (/not logged in|log ?in|sign ?in|unauthori[sz]ed/i.test(t)) return { ok: false };
-      return { ok: null };
+    if (c.id === 'muse') {
+      if (process.env.META_API_KEY) return { ok: true, note: 'META_API_KEY' };
+      return { ok: null, note: tr().museLoginUnknown };
     }
     if (c.id === 'gemini') {
       const r = await run(bin, ['-p', '/usage', '--output-format', 'json'], { cwd: TMP, timeoutMs: 30000 });
@@ -611,6 +632,29 @@ async function configure(pins, lang, prevLang) {
   fs.writeFileSync(CONFIG, out);
   say(green(`  ${t.saved(rel)}`) + dim(t.savedWhat(userName, port)));
   return JSON.parse(out);
+}
+
+// Opt-in LAN access reuses the password-gated HTTPS listener. Never configure a router.
+async function configurePhone(cfg) {
+  const t = tr();
+  step(t.stepPhone);
+  if (!(await yes(`  ${t.phoneQ}`))) return;
+  const text = fs.readFileSync(CONFIG, 'utf8');
+  const current = JSON.parse(text);
+  const external = { ...(current.external || {}), enabled: true };
+  fs.writeFileSync(CONFIG, patchJson(text, current, { external }));
+  cfg.external = external;
+  say(dim(`  ${t.phoneHint}`));
+  if (WIN) {
+    const port = Number(external.port) || 18321;
+    const args = ['advfirewall', 'firewall', 'add', 'rule', 'name=AI chatroom', 'dir=in', 'action=allow', 'protocol=TCP', `localport=${port}`, 'profile=private'];
+    say(dim(`  ${t.firewallHint}`));
+    say(`  netsh advfirewall firewall add rule name="AI chatroom" dir=in action=allow protocol=TCP localport=${port} profile=private`);
+    if (await yes(`  ${t.firewallQ}`)) {
+      const code = await interactive('netsh', args);
+      if (code !== 0) say(yellow(`  ${t.firewallFail}`));
+    }
+  }
 }
 
 // ---- test calls ----
@@ -761,6 +805,7 @@ async function main() {
   step(t.stepConfig);
   const cfg = await configure(pins, lang, prevLang);
   const port = Number(cfg?.port) || 8321;
+  if (cfg) await configurePhone(cfg);
 
   if (ready.length) {
     step(t.stepTest);

@@ -705,3 +705,33 @@ select {
   .chat-head { padding: 10px 12px; }
   .line { max-width: 100%; }
 }
+
+/* Chat-only rooms keep notes and usage; hidden tools cannot be revealed by badge updates. */
+.app.chat-only .world-link,
+.app.chat-only #stickerBtn,
+.app.chat-only #stickerPop,
+.app.chat-only [data-tab="files"],
+.app.chat-only #wsBadge { display: none !important; }
+
+@media (hover: none) {
+  .line:not(.tools-open) .tools { opacity: 0; pointer-events: none; }
+  .line.tools-open .tools { display: flex; opacity: 1; pointer-events: auto; }
+  .tools button { min-width: 36px; min-height: 36px; }
+}
+@media (max-width: 820px) {
+  .app { height: var(--visual-height, 100dvh); }
+  textarea, input, select { font-size: 16px; }
+  .composer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .chat-head { padding-top: calc(10px + env(safe-area-inset-top)); }
+  .side, .ws {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    max-height: var(--visual-height, 100dvh);
+  }
+  .side { padding-left: env(safe-area-inset-left); }
+  .ws { padding-right: env(safe-area-inset-right); }
+}

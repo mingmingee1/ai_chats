@@ -21,12 +21,12 @@ const ICON = {
 };
 const QUICK_EMOJI = ['👍', '😂', '❤️', '😮', '🤔', '🔥', '👀', '🙏'];
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'];
-const AI_IDS = ['claude', 'gpt', 'grok', 'gemini'];
+const AI_IDS = ['claude', 'gpt', 'muse', 'gemini'];
 // Every spelling that calls a member, in any room language (same lists as lib/members.mjs).
 const ALIASES = {
   claude: ['claude', '클로드', 'クロード'],
   gpt: ['chatgpt', 'gpt', '지피티', '챗지피티', '쳇지피티', 'チャットgpt', 'チャッピー', 'ジーピーティー'],
-  grok: ['grok', '그록', 'グロック', 'グロク'],
+  muse: ['muse', '뮤즈', 'ミューズ', 'meta ai'],
   gemini: ['gemini', '제미나이', '제미니', 'ジェミニ', 'ジェミナイ'],
 };
 const STATUSES = ['idle', 'reading', 'typing', 'away', 'sleeping', 'off', 'missing', 'error'];
@@ -44,6 +44,34 @@ const msgsBox = $('#msgs');
 const input = $('#input');
 
 // ---------------------------------------------------------------------------
+// Touch devices have no hover: tapping text reveals just this bubble's tools.
+const touchTools = window.matchMedia('(hover: none)');
+function closeTouchTools() {
+  for (const line of msgsBox.querySelectorAll('.tools-open')) line.classList.remove('tools-open');
+}
+document.addEventListener('click', (event) => {
+  if (!touchTools.matches || !(event.target instanceof Element)) return;
+  if (event.target.closest('.tools, #reactPop')) return;
+  const bubble = event.target.closest('.bubble');
+  const line = bubble?.closest('.line');
+  const interactive = event.target.closest('a, button, img, input, textarea, select, video, iframe');
+  const open = line && !line.classList.contains('tools-open') && !interactive && !window.getSelection()?.toString();
+  closeTouchTools();
+  if (open) line.classList.add('tools-open');
+});
+tl.addEventListener('scroll', closeTouchTools, { passive: true });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeTouchTools(); });
+
+// Follow the visible viewport when the phone keyboard opens. Keep readers in place.
+function resizeViewport() {
+  const stuck = S.stuck;
+  document.documentElement.style.setProperty('--visual-height', `${window.visualViewport?.height || window.innerHeight}px`);
+  if (stuck) requestAnimationFrame(() => { tl.scrollTop = tl.scrollHeight; });
+}
+window.visualViewport?.addEventListener('resize', resizeViewport);
+window.addEventListener('resize', resizeViewport);
+resizeViewport();
+
 // helpers
 
 const extOf = (p) => (String(p).split('.').pop() || '').toLowerCase();
@@ -241,7 +269,7 @@ function buildQuote(id) {
 // page; without it the Claude desktop browser pane refuses to load the frame at all.
 const WS_FRAME_SANDBOX = 'allow-scripts allow-same-origin';
 
-// What Grok and Gemini get instead of the photo (their CLIs take no images).
+// Description supplied to members whose CLI cannot see the uploaded photo.
 function descCap(desc) {
   const cap = el('div', 'att-cap att-desc');
   cap.textContent = t('desc.cap', { desc: desc.length > 140 ? desc.slice(0, 140) + '…' : desc });
@@ -421,7 +449,7 @@ function addMessage(m) {
     j.hidden = false;
     j.textContent = t('chat.jumpN', { n: S.unseen });
   }
-  if ((m.kind === 'file' || m.attach) && !wsVisible()) $('#wsBadge').hidden = false;
+  if (!S.room.chatOnly && (m.kind === 'file' || m.attach) && !wsVisible()) $('#wsBadge').hidden = false;
 }
 
 function updateMessage(m) {
@@ -557,6 +585,17 @@ function renderTyping() {
 
 function renderRoom() {
   const r = S.room;
+  app.classList.toggle('chat-only', !!r.chatOnly);
+  $('.world-link').hidden = !!r.chatOnly;
+  $('#stickerBtn').hidden = !!r.chatOnly;
+  $('[data-tab="files"]').hidden = !!r.chatOnly;
+  $('#wsBtn').setAttribute('aria-label', t(r.chatOnly ? 'head.notesUsage' : 'head.ws'));
+  $('#ws').setAttribute('aria-label', t(r.chatOnly ? 'head.notesUsage' : 'ws.aria'));
+  if (r.chatOnly) {
+    toggleStickerPop(false);
+    $('#wsBadge').hidden = true;
+    if (S.tab === 'files') { S.openPath = null; selectTab('notes'); }
+  }
   app.classList.toggle('running', !!r.running);
   app.classList.toggle('sleeping', !r.running && !!r.sleeping);
   const roomName = r.roomName || t('app.title');
@@ -799,6 +838,7 @@ function renderStickerPop() {
 }
 
 function toggleStickerPop(open = $('#stickerPop').hidden) {
+  if (S.room.chatOnly) open = false;
   const pop = $('#stickerPop');
   if (open) { closeMention(); renderStickerPop(); }
   pop.hidden = !open;
@@ -945,6 +985,7 @@ $('#scrim').onclick = () => {
 
 const TAB_BODIES = { files: '#wsFiles', notes: '#wsNotes', usage: '#wsUsage' };
 function selectTab(tab) {
+  if (S.room.chatOnly && tab === 'files') tab = 'notes';
   S.tab = tab;
   for (const x of document.querySelectorAll('.tabs button')) x.classList.toggle('on', x.dataset.tab === tab);
   for (const [k, sel] of Object.entries(TAB_BODIES)) $(sel).hidden = k !== tab;
@@ -1065,7 +1106,7 @@ function onFiles(list) {
   if (!$('#stickerPop').hidden) renderStickerPop();
   const changedOpen = S.openPath && before.get(S.openPath) !== list.find((f) => f.path === S.openPath)?.mtime;
   if (S.tab === 'files' && (!S.openPath || changedOpen)) renderWs();
-  if (!wsVisible()) $('#wsBadge').hidden = false;
+  if (!S.room.chatOnly && !wsVisible()) $('#wsBadge').hidden = false;
   setTimeout(() => { for (const f of list) S.freshFiles.delete(f.path); if (S.tab === 'files' && !S.openPath) renderFileList(); }, 20000);
 }
 
@@ -1179,6 +1220,10 @@ function usageCard(id) {
   h.querySelector('.n').textContent = nameOf(id);
   h.querySelector('.s').textContent = [u.plan, u.at ? t('usage.checkedAgo', { ago: ago(u.at) }) : null].filter(Boolean).join(' · ') || t('usage.notChecked');
   card.append(h);
+  if (id === 'muse') {
+    card.append(el('div', 'u-empty', esc(t('usage.museUnsupported'))));
+    return card;
+  }
   if (u.ok === false) {
     const e = el('div', 'u-err');
     e.textContent = t('usage.failed', { error: u.error || t('usage.unknown') }) + (u.at ? ` · ${t('usage.lastValues')}` : '');
