@@ -1406,7 +1406,7 @@ function onUsage(data) {
 }
 
 // ---------------------------------------------------------------------------
-// lightbox + theme
+// lightbox (theme is shared across rooms by theme.js)
 
 function lightbox(src, cap) {
   $('#lbImg').src = src;
@@ -1420,19 +1420,6 @@ document.addEventListener('keydown', (e) => {
     $('#reactPop').hidden = true;
   }
 });
-
-function applyTheme(theme) {
-  if (theme) document.documentElement.dataset.theme = theme;
-  else delete document.documentElement.dataset.theme;
-}
-try { applyTheme(localStorage.getItem('theme')); } catch { /* private mode */ }
-$('#themeBtn').onclick = () => {
-  const cur = document.documentElement.dataset.theme
-    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const next = cur === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  try { localStorage.setItem('theme', next); } catch { /* private mode */ }
-};
 
 // ---------------------------------------------------------------------------
 // boot
