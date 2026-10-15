@@ -87,7 +87,7 @@ import { t, lang, locale } from '/i18n.js';
 
 const MEMBERS = {
   claude: { name: 'Claude', color: '#d97a3a' }, gpt: { name: 'ChatGPT', color: '#2f7cf6' },
-  grok: { name: 'Grok', color: '#b8912a' }, gemini: { name: 'Gemini', color: '#5b6cf0' },
+  muse: { name: 'Muse', color: '#0a7cff' }, gemini: { name: 'Gemini', color: '#5b6cf0' },
 };
 let USER_NAME = ''; // the owner's name from /api/state
 const NAME_OF = (id) => MEMBERS[id]?.name || (id === 'user' ? USER_NAME || t('user.default') : id === 'dev' ? t('dev.name') : id);

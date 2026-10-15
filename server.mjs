@@ -1,8 +1,9 @@
-// AI 단톡방 — Claude, ChatGPT, Grok and Gemini chatting in one web room.
+// AI 단톡방 — Claude, ChatGPT, Muse and Gemini chatting in one web room.
 // Zero-dependency Node server: static UI + SSE + one independent loop per AI.
 
 import http from 'node:http';
 import https from 'node:https';
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +33,8 @@ const DEFAULT_CFG = {
   historyForPrompt: 40,
   autoSleepMinutes: 30,
   speed: 'normal',
-  imageGen: true,
+  chatOnly: true, // Disable workspace, world, stickers and image generation.
+  imageGen: false,
   imageCooldownSec: 240,
   // Members may use their CLI's own web search (lib/agents.mjs chat()); nothing that
   // opens arbitrary pages locally.
@@ -55,7 +57,7 @@ const DEFAULT_CFG = {
   agents: {
     claude: { model: 'sonnet', boost: { model: 'opus' } },
     gpt: { model: 'gpt-6-sol', effort: 'low', boost: { model: 'gpt-6-astra', effort: 'medium' }, imageModel: 'gpt-6-luna' },
-    grok: { model: 'grok-4.7', effort: 'low', boost: { effort: 'high' } },
+    muse: { model: '', effort: 'low', boost: { effort: 'high' } },
     gemini: { model: 'gemini-3.8-flash-medium', rotate: 4, boost: { model: 'gemini-3.8-flash-high' } },
   },
 };
@@ -83,6 +85,7 @@ function loadConfig() {
   cfg.language = setLang(user.language ?? (Object.keys(user).length ? 'ko' : 'auto'));
   cfg.roomName = cfg.roomName || LANG_DEFAULTS[cfg.language].roomName;
   cfg.userName = cfg.userName || LANG_DEFAULTS[cfg.language].userName;
+  if (cfg.chatOnly) cfg.imageGen = false;
   return cfg;
 }
 
@@ -166,6 +169,7 @@ const nameJ = (id, pair) => withJosa(id, cfg.userName, pair);
 // English and Japanese use the plain name.
 const T = {
   ko: {
+    lanOn: (url) => `같은 와이파이의 폰에서: ${url} (비밀번호: data/external-password.txt)`,
     devIn: () => `🛠 ${DEV.name} 들어옴 (개발 세션 연결)`,
     devOut: () => `🛠 ${DEV.name} 나감`,
     devPause: (why) => `⏸ ${why} 쌓여서 ${withJosa(cfg.userName, cfg.userName, '이/가')} 말할 때까지 다들 잠깐 쉬어`,
@@ -203,7 +207,7 @@ const T = {
     imgLimit: '작업공간 파일 개수 한도라 못 올려',
     tooLarge: '보낸 내용이 너무 커',
     noSticker: '없는 스티커야',
-    boostWho: '누구를 진심모드로 할지 적어줘. 예: /boost @Grok 이거 봐줘',
+    boostWho: '누구를 진심모드로 할지 적어줘. 예: /boost @Muse 이거 봐줘',
     boostOff: '진심모드가 꺼져 있어. 방 설정에서 켜줘.',
     boostNone: '그 멤버는 진심모드 설정이 없어',
     boostArmed: (names) => `⚡ ${withJosa(cfg.userName, cfg.userName, '이/가')} ${names} 진심모드를 켰어 (다음 턴)`,
@@ -221,6 +225,7 @@ const T = {
     cliHint: '설치·로그인은 setup.bat(Windows) / ./setup.sh(macOS·Linux)가 도와줘.',
   },
   en: {
+    lanOn: (url) => `From a phone on the same Wi-Fi: ${url} (password: data/external-password.txt)`,
     devIn: () => `🛠 ${DEV.name} joined (dev session connected)`,
     devOut: () => `🛠 ${DEV.name} left`,
     devPause: (why) => `⏸ ${why}, so everyone's taking a break until ${cfg.userName} says something`,
@@ -258,7 +263,7 @@ const T = {
     imgLimit: "The Workspace is at its file limit, so the image can't be uploaded",
     tooLarge: 'That was too big to send',
     noSticker: "That sticker doesn't exist",
-    boostWho: 'Say who to put in Boost mode, e.g. /boost @Grok take a look at this',
+    boostWho: 'Say who to put in Boost mode, e.g. /boost @Muse take a look at this',
     boostOff: 'Boost mode is off. Turn it on in the room settings.',
     boostNone: "That member doesn't have Boost mode settings",
     boostArmed: (names) => `⚡ ${cfg.userName} turned on Boost mode for ${names} (next turn)`,
@@ -276,6 +281,7 @@ const T = {
     cliHint: 'setup.bat (Windows) / ./setup.sh (macOS, Linux) helps with installing and logging in.',
   },
   ja: {
+    lanOn: (url) => `同じWi-Fiのスマホから: ${url} (パスワード: data/external-password.txt)`,
     devIn: () => `🛠 ${DEV.name}が入ってきた(開発セッション接続)`,
     devOut: () => `🛠 ${DEV.name}が抜けた`,
     devPause: (why) => `⏸ ${why}から、${cfg.userName}が話すまでみんなちょっと休憩ね`,
@@ -313,7 +319,7 @@ const T = {
     imgLimit: 'ワークスペースのファイル数が上限だからアップできない',
     tooLarge: '送った内容が大きすぎる',
     noSticker: 'そのスタンプはないよ',
-    boostWho: '誰を本気モードにするか書いて。例: /boost @Grok これ見て',
+    boostWho: '誰を本気モードにするか書いて。例: /boost @Muse これ見て',
     boostOff: '本気モードがオフになってる。ルーム設定でオンにして。',
     boostNone: 'そのメンバーには本気モードの設定がないよ',
     boostArmed: (names) => `⚡ ${cfg.userName}が${names}の本気モードをオンにした(次のターン)`,
@@ -352,7 +358,7 @@ function memberView(id) {
   else if (Date.now() < a.offlineUntil) status = 'error';
   return {
     id, name: MEMBERS[id].name, maker: MEMBERS[id].maker, color: MEMBERS[id].color,
-    model: cfg.agents[id].model, imageGen: MEMBERS[id].imageGen && cfg.imageGen,
+    model: defaultLabel(id), imageGen: MEMBERS[id].imageGen && cfg.imageGen,
     status, drawing: a.imageBusy, enabled: room.enabled[id], available: avail[id],
     calls: a.calls, lastMs: a.lastMs, lastError: a.lastError,
     deep: !!a.deepNow, defaultModel: defaultLabel(id), boostModel: hasBoost(id) ? boostLabel(id) : null,
@@ -362,6 +368,7 @@ function roomView() {
   return {
     running: room.running, sleeping: room.sleeping, speed: room.speed, autoSleepMin: room.autoSleepMin,
     calls: room.calls, roomName: cfg.roomName, userName: cfg.userName, lang: getLang(), boostMode: boostMode(),
+    chatOnly: !!cfg.chatOnly,
     dev: { online: devBridge.online },
   };
 }
@@ -544,7 +551,7 @@ function shuffle(arr) {
 const router = new Router(cfg);
 const boostMode = () => room.boostMode || 'auto';
 const hasBoost = (id) => boostMode() !== 'off' && !!router.boostOf(id);
-const defaultLabel = (id) => cfg.agents[id].model;
+const defaultLabel = (id) => cfg.agents[id].model || modelLabel(cfg.agents[id]);
 const boostLabel = (id) => modelLabel({ ...cfg.agents[id], ...cfg.agents[id].boost });
 function selfBoostWait(a) {
   return Math.max(0, cfg.boost.selfCooldownSec * 1000 - (Date.now() - a.lastSelfBoostAt));
@@ -584,6 +591,9 @@ function unseenUploads(a) {
     .slice(-3);
 }
 
+const CHAT_ONLY_DROP = ['files', 'show', 'sticker', 'sticker_save', 'image', 'build', 'block_define', 'move', 'world_look', 'world_shot'];
+const uploadedPhoto = (rel) => store.messages.some((m) => m.from === 'user' && m.attach?.upload && m.attach.path === rel) && store.isImage(rel);
+
 async function ask(a, reason, openFile, deep = null) {
   const canSee = adapters.canSee(a.id);
   const ups = canSee && !openFile ? unseenUploads(a) : [];
@@ -595,7 +605,7 @@ async function ask(a, reason, openFile, deep = null) {
   let hist = cfg.historyForPrompt;
   let turn;
   for (;;) {
-    turn = buildTurn(a.id, { store, cfg: { ...cfg, historyForPrompt: hist }, agent: a, reason, openFile, deepWait, canSee, attached, world: world.summary(a.id, name) });
+    turn = buildTurn(a.id, { store, cfg: { ...cfg, historyForPrompt: hist }, agent: a, reason, openFile, deepWait, canSee, attached, world: cfg.chatOnly ? null : world.summary(a.id, name) });
     if (turn.length <= max || hist <= 8) break;
     hist -= 8;
   }
@@ -611,6 +621,13 @@ async function ask(a, reason, openFile, deep = null) {
   store.log(a.id, `turn reason=${reason} model=${deep ? `${boostLabel(a.id)} BOOST` : defaultLabel(a.id)}${images.length ? ` images=${images.length}` : ''} ms=${res.ms} ok=${res.ok}\n${res.text.slice(0, 4000)}${res.detail ? `\nDETAIL ${res.detail}` : ''}`);
   if (!res.ok) throw new Error(res.detail || 'empty reply');
   const act = parseAction(res.text);
+  if (cfg.chatOnly && act) {
+    const dropped = CHAT_ONLY_DROP.filter((key) => key in act);
+    for (const key of dropped) delete act[key];
+    // Keep open only for the host's uploaded photos, never workspace text or generated art.
+    if (act.open && !uploadedPhoto(act.open)) { delete act.open; dropped.push('open'); }
+    if (dropped.length) store.log(a.id, `chatOnly ignored: ${dropped.join(', ')}`);
+  }
   if (!act) store.log(a.id, 'could not parse a JSON action');
   return act;
 }
@@ -1046,7 +1063,7 @@ const MIME = {
   '.gif': 'image/gif', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.csv': 'text/plain; charset=utf-8',
   '.py': 'text/plain; charset=utf-8', '.ts': 'text/plain; charset=utf-8', '.yaml': 'text/plain; charset=utf-8',
   '.yml': 'text/plain; charset=utf-8', '.xml': 'text/plain; charset=utf-8', '.tsv': 'text/plain; charset=utf-8',
-  '.ico': 'image/x-icon',
+  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json',
 };
 
 // Workspace files are written by the AIs: serve them sandboxed with no network access.
@@ -1105,7 +1122,7 @@ function saveUpload(img) {
   return rel;
 }
 
-// Members without eyes (Grok, Gemini) get a text description of each photo. Their turns
+// Members whose photo support is disabled get a text description of each photo. Their turns
 // wait for it for a little while (see tick) so they don't answer before it exists.
 const DESC_WAIT_MS = 45000;
 const describing = new Set();
@@ -1138,9 +1155,12 @@ async function handleApi(req, res, url) {
       room: roomView(),
       members: AI_IDS.map(memberView),
       messages: store.recent(300),
-      files: store.listFiles(),
+      files: cfg.chatOnly ? [] : store.listFiles(),
       usage: usageView(),
     });
+  }
+  if (cfg.chatOnly && (p === '/api/world' || (p === '/api/file' && !uploadedPhoto(url.searchParams.get('path'))))) {
+    return sendJson(res, 403, { error: 'chat-only mode' });
   }
   if (req.method === 'GET' && p === '/api/world') {
     return sendJson(res, 200, world.view());
@@ -1172,6 +1192,7 @@ async function handleApi(req, res, url) {
     return sendJson(res, e.message === 'too large' ? 413 : 400, { error: e.message === 'too large' ? tx().tooLarge : 'bad json' });
   }
 
+  if (p === '/api/send' && body.sticker && cfg.chatOnly) return sendJson(res, 403, { error: 'chat-only mode' });
   if (p === '/api/send' && body.sticker) {
     const rel = stickerPath(body.sticker);
     if (!rel || !fs.existsSync(store.abs(rel))) return sendJson(res, 400, { error: tx().noSticker });
@@ -1291,16 +1312,19 @@ async function handleRequest(req, res) {
       req.on('close', () => clients.delete(res));
       return;
     }
+    if (cfg.chatOnly && p.startsWith('/api/dev/workspace')) return sendJson(res, 403, { error: 'chat-only mode' });
     if (p.startsWith('/api/dev/')) { await devBridge.handle(req, res, url, { sendJson, readBody }); return; }
     if (p.startsWith('/api/')) return await handleApi(req, res, url);
     if (p.startsWith('/ws/')) {
       let rel;
       try { rel = store.safeRel(p.slice(4)); } catch { res.writeHead(404); res.end(); return; }
+      if (cfg.chatOnly && !uploadedPhoto(rel)) { res.writeHead(403); res.end('chat-only mode'); return; }
       return serveStatic(res, store.abs(rel), { 'Content-Security-Policy': WS_CSP, 'X-Content-Type-Options': 'nosniff' });
     }
     const rel = p === '/' ? 'index.html' : p.replace(/^\/+/, '');
     const file = path.normalize(path.join(ROOT, 'public', rel));
     if (!file.startsWith(path.join(ROOT, 'public'))) { res.writeHead(403); res.end(); return; }
+    if (cfg.chatOnly && path.basename(file) === 'world.html') { res.writeHead(403); res.end('chat-only mode'); return; }
     if (file.endsWith('.html')) return serveHtml(res, file);
     return serveStatic(res, file);
   } catch (e) {
@@ -1334,6 +1358,10 @@ if (cfg.external.enabled) {
     extServer.on('error', (e) => console.log(tx().extPortFail(e.message)));
     extServer.listen(cfg.external.port, cfg.external.host, () => {
       console.log(tx().extOn(secure ? 'https' : 'http', cfg.external.port));
+      const addresses = new Set(Object.values(os.networkInterfaces()).flat().filter((n) =>
+        n && !n.internal && (n.family === 'IPv4' || n.family === 4) &&
+        (cfg.external.host === '0.0.0.0' || cfg.external.host === '::' || cfg.external.host === n.address)).map((n) => n.address));
+      for (const ip of addresses) console.log(tx().lanOn(`${secure ? 'https' : 'http'}://${ip}:${extServer.address().port}`));
     });
   } catch (e) {
     console.log(tx().extFail(e.message));

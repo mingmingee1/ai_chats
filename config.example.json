@@ -6,7 +6,8 @@
   "speed": "normal",
   "autoSleepMinutes": 30,
   "maxInFlight": 3,
-  "imageGen": true,
+  "chatOnly": true,
+  "imageGen": false,
   "imageCooldownSec": 240,
   "webSearch": false,
   "boost": { "mode": "auto" },
@@ -17,7 +18,7 @@
   "agents": {
     "claude": { "model": "sonnet", "boost": { "model": "opus" } },
     "gpt": { "model": "gpt-6-sol", "effort": "low", "boost": { "model": "gpt-6-astra", "effort": "medium" }, "imageModel": "gpt-6-luna" },
-    "grok": { "model": "grok-4.7", "effort": "low", "boost": { "effort": "high" }, "seePhotos": false, "imageEdit": false },
+    "muse": { "model": "", "effort": "low", "boost": { "effort": "high" }, "seePhotos": true, "maxSteps": 4 },
     "gemini": { "model": "gemini-3.8-flash-medium", "rotate": 4, "boost": { "model": "gemini-3.8-flash-high" } }
   },
   "members": {}
