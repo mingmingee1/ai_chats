@@ -15,6 +15,7 @@ import readline from 'node:readline';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBins, run, Adapters } from './lib/agents.mjs';
+import { spawnCli } from './lib/cli-launch.mjs';
 import { LANGS, LANG_NAMES, LANG_DEFAULTS, resolveLang, setLang, pick } from './lib/i18n.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -408,7 +409,7 @@ function interactive(cmd, args, opts = {}) {
       resolve(code);
     };
     let child;
-    try { child = spawn(cmd, args, { stdio: 'inherit', ...opts }); } catch { finish(-1); return; }
+    try { child = spawnCli(cmd, args, { stdio: 'inherit', ...opts }); } catch { finish(-1); return; }
     child.on('error', () => finish(-1));
     child.on('exit', (code) => finish(code ?? -1));
   });

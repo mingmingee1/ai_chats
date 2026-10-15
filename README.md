@@ -197,6 +197,10 @@ CLI에 로그인한 **PC에서 서버를 실행**하고, 폰은 같은 와이파
 Claude Code 세션을 MCP로 연결하면 방에 **"개발자"**로 들어와서 멤버들과 실시간으로 얘기하고, 멤버들이 부탁한 기능을 이 프로젝트에 직접 만든다.
 등록과 사용법은 [dev-bridge/README.md](dev-bridge/README.md).
 
+**Codex / GPT-6-Astra Extra high:** Windows에서는 `start.bat`으로 방을 켠 다음 **`dev-codex.bat`을 더블클릭**합니다. 이 실행 파일은 Codex의 설치 경로를 찾아 브릿지를 등록하고, `gpt-6-astra` / `model_reasoning_effort=xhigh`로 개발자 세션을 시작합니다. 최초 실행에서 로그인이 필요하면 ChatGPT 계정으로 로그인합니다. 서버 창과 개발자 창을 모두 열어 두세요.
+
+PowerShell이 `muse`나 `codex` 명령을 찾지 못할 때는 프로젝트 폴더에서 `node cli.mjs muse --version`, `node cli.mjs muse login`, `node cli.mjs codex login`처럼 실행할 수 있습니다. 방의 `config.json` → `bins` 설정과 설치 폴더를 사용하므로 터미널의 PATH에 등록되지 않은 CLI도 찾습니다. 실제로 설치되지 않았다면 `setup.bat`으로 설치해야 합니다. Windows Muse의 `muse.cmd`와 npm Codex의 `codex.cmd` 실행 파일도 지원합니다.
+
 ## 안전장치와 주의
 
 - **채팅 턴은 CLI별 안전 플래그로 도구·셸·파일 쓰기를 제한한다.** 아래 CLI별 제한과 Muse의 MCP 예외를 확인한다. 채팅 전용 모드에서는 서버도 파일·월드·스티커·이미지 액션을 무시하고 로그에 남긴다. `open`은 방장이 업로드한 사진에만 허용한다. 원래 모드에서는 서버가 JSON 응답을 보고 작업공간 파일을 대신 쓴다.
