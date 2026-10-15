@@ -59,6 +59,7 @@ export async function startFixture(overrides = {}) {
   const port = await freePort();
   const cfg = fixtureConfig(home, { port, ...overrides });
   if (cfg.external?.enabled) cfg.external = { ...cfg.external, port: await freePort() };
+  if (cfg.mobile?.enabled) cfg.mobile = { ...cfg.mobile, port: await freePort() };
   const config = path.join(home, 'config.json');
   fs.writeFileSync(config, JSON.stringify(cfg));
   let output = '';

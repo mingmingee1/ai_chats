@@ -17,6 +17,7 @@ import { Router } from './lib/router.mjs';
 import { AI_IDS, MEMBERS, DEV, displayName, mentions, atMentions, withJosa } from './lib/members.mjs';
 import { DevBridge, devChainState } from './lib/dev.mjs';
 import { ExternalGate } from './lib/external.mjs';
+import { startMobileListener } from './lib/mobile-access.mjs';
 import { World } from './lib/world.mjs';
 import { shootWorld } from './lib/worldshot.mjs';
 import { Workroom } from './lib/workroom.mjs';
@@ -55,6 +56,7 @@ const DEFAULT_CFG = {
   // Second listener for the owner away from home (lib/external.mjs): password login,
   // no dev bridge API. Off unless config.json turns it on.
   external: { enabled: false, port: 18321, host: '0.0.0.0', https: true },
+  mobile: { enabled: false, port: 18322, origin: '' },
   // model/effort = default; boost = what a 진심모드 turn overrides (null disables it)
   agents: {
     claude: { model: 'sonnet', boost: { model: 'opus' } },
@@ -73,6 +75,7 @@ function loadConfig() {
   cfg.dev = { ...DEFAULT_CFG.dev, ...(user.dev || {}) };
   cfg.spark = { ...DEFAULT_CFG.spark, ...(user.spark || {}) };
   cfg.external = { ...DEFAULT_CFG.external, ...(user.external || {}) };
+  cfg.mobile = { ...DEFAULT_CFG.mobile, ...(user.mobile || {}) };
   // Older configs: ChatGPT-only deepModel / deepMode / deepTimeoutSec.
   if (user.deepMode && !user.boost?.mode) cfg.boost.mode = user.deepMode;
   if (user.deepTimeoutSec && !user.boost?.timeoutSec) cfg.boost.timeoutSec = user.deepTimeoutSec;
@@ -1363,23 +1366,24 @@ const server = http.createServer(handleRequest);
 
 // External listener: login first, and the dev bridge API does not exist here at all.
 let extServer = null;
-if (cfg.external.enabled) {
+let mobileServer = null;
+if (cfg.external.enabled || cfg.mobile.enabled) {
   const gate = new ExternalGate(HOME_DIR, { log: (t) => store.log('external', t) });
   const secure = cfg.external.https !== false;
-  const onExternal = async (req, res) => {
+  const onExternal = async (req, res, requestSecure = secure) => {
     try {
       const url = new URL(req.url, 'https://external');
       const p = pathOf(url);
       if (p === null) { res.writeHead(400); res.end(); return; }
       if (path.posix.normalize(p).toLowerCase().startsWith('/api/dev')) { res.writeHead(404); res.end('not found'); return; }
-      if (await gate.handle(req, res, p, { secure })) return;
+      if (await gate.handle(req, res, p, { secure: requestSecure })) return;
       await handleRequest(req, res);
     } catch (e) {
       console.error(e);
       if (!res.headersSent) { res.writeHead(500); res.end(); }
     }
   };
-  try {
+  if (cfg.external.enabled) try {
     extServer = secure ? https.createServer(gate.tls(), onExternal) : http.createServer(onExternal);
     extServer.on('error', (e) => console.log(tx().extPortFail(e.message)));
     extServer.listen(cfg.external.port, cfg.external.host, () => {
@@ -1391,6 +1395,13 @@ if (cfg.external.enabled) {
     });
   } catch (e) {
     console.log(tx().extFail(e.message));
+  }
+  if (cfg.mobile.enabled) try {
+    mobileServer = startMobileListener(cfg.mobile, (req, res) => onExternal(req, res, true));
+    mobileServer.on('error', (e) => console.log(`모바일 앱 연결 오류: ${e.message}`));
+    mobileServer.on('listening', () => console.log(`모바일 앱 주소 → ${cfg.mobile.origin} (Tailscale 연결 필요)`));
+  } catch (e) {
+    console.log(`모바일 앱 연결 오류: ${e.message}`);
   }
 }
 

@@ -24,3 +24,14 @@ assets/sheets/
 backups/
 node_modules/
 *.log
+
+# Android build outputs and signing keys stay local
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/build/
+mobile/android/build/
+*.keystore
+*.jks
+*.apk
+*.idsig
+!mobile/releases/*.apk
